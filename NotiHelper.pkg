@@ -1,0 +1,9 @@
+&EN
+#{"NotiHelper"},(0xA0000D15),1,0,0
+
+%{"Resymbian"}
+:"Resymbian"
+
+; The agent shows a note and writes an Inbox entry. Open4All is not required
+; by either API, but is normally already active for the TLS-patched JARs.
+"NotiHelper.exe"-"!:\sys\bin\NotiHelper.exe"

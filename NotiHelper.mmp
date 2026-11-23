@@ -1,0 +1,22 @@
+TARGET NotiHelper.exe
+TARGETTYPE exe
+UID 0xA0000D15
+
+CAPABILITY NetworkServices ReadUserData WriteUserData LocalServices
+
+SOURCEPATH .
+SOURCE NotiHelper.cpp
+
+SYSTEMINCLUDE \epoc32\include
+
+LIBRARY euser.lib
+LIBRARY estlib.lib
+LIBRARY esock.lib
+LIBRARY insock.lib
+LIBRARY aknnotify.lib
+LIBRARY eiksrv.lib
+LIBRARY bafl.lib
+LIBRARY msgs.lib
+LIBRARY smcm.lib
+LIBRARY etext.lib
+LIBRARY gsmu.lib

@@ -1,0 +1,37 @@
+# signsis/makekeys built from GnuPoc, with the OpenSSL 1.1 error check fixed.
+#
+# GnuPoc 1.22's signutils.cpp decides "end of certificate chain" by comparing
+# ERR_GET_FUNC(err) with PEM_F_PEM_READ_BIO. OpenSSL 1.1 removed the function
+# code from the error queue, so ERR_GET_FUNC() is always 0 and the comparison
+# never matches: reading the *last* certificate ends in the normal
+# PEM_R_NO_START_LINE error, that is treated as corrupt input, and signing fails
+# with "Expecting: CERTIFICATE" no matter what certificate is supplied.
+#
+# The fix is to keep the library and reason checks and drop the function one.
+# Same for the DER fallback. Build this on top of the SDK image:
+#
+#   docker build -f docker/Dockerfile.signtool -t discofi-e51-sdk:signfix .
+#
+# and point build-in-container at that tag. The patch also belongs in
+# gnupoc-openssl11.patch for a from-scratch image; this layer is what makes the
+# already-built 3.7 GB SDK image usable without downloading it again.
+FROM discofi-e51-sdk:latest
+
+USER root
+
+RUN cd /opt/gnupoc-package-1.22/tools/makesis-4/src \
+    && perl -0pi -e 's/func == PEM_F_PEM_READ_BIO && //' signutils.cpp \
+    && perl -0pi -e 's/func == ASN1_F_ASN1_GET_OBJECT && //' signutils.cpp \
+    && perl -0pi -e 's/int func = ERR_GET_FUNC\(err\);/int func = 0; (void)func;/' signutils.cpp \
+    && grep -n "reason == PEM_R_NO_START_LINE\|reason == ASN1_R_HEADER_TOO_LONG" signutils.cpp
+
+RUN cd /opt/gnupoc-package-1.22/tools/makesis-4 \
+    && make \
+    && cp src/signsis src/makekeys /opt/symbian-tools/bin/ \
+    && chown builder:builder /opt/symbian-tools/bin/signsis /opt/symbian-tools/bin/makekeys
+
+# The base image baked the original build script; pick up the current one too.
+COPY docker/build-in-container.sh /usr/local/bin/build-in-container.sh
+RUN chmod 0755 /usr/local/bin/build-in-container.sh
+
+USER builder
