@@ -38,6 +38,9 @@ COPY docker/gnupoc-openssl11.patch /opt/gnupoc-openssl11.patch
 RUN cd /opt/gnupoc-package-1.22 \
     && patch -p1 < /opt/gnupoc-openssl11.patch \
     && sed -i 's/verify(InRange/assert(InRange/' tools/elf2e32/deflate/deflate/farray.h \
+    && perl -0pi -e 's/func == PEM_F_PEM_READ_BIO && //' tools/makesis-4/src/signutils.cpp \
+    && perl -0pi -e 's/func == ASN1_F_ASN1_GET_OBJECT && //' tools/makesis-4/src/signutils.cpp \
+    && perl -0pi -e 's/int func = ERR_GET_FUNC\(err\);/int func = 0; (void)func;/' tools/makesis-4/src/signutils.cpp \
     && rm /opt/gnupoc-openssl11.patch
 
 # CodeSourcery GCCE cross-compiler (prebuilt IA32 GNU/Linux binaries).
@@ -83,5 +86,5 @@ USER builder
 WORKDIR /work
 
 # Mount the repo read-only at /src and the output directory at /out:
-#   docker run --rm -v "$PWD/native/e51:/src:ro" -v "$PWD/out:/out" IMAGE
+#   docker run --rm -v "$PWD:/src:ro" -v "$PWD/out:/out" IMAGE
 ENTRYPOINT ["/usr/local/bin/build-in-container.sh"]

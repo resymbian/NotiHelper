@@ -75,6 +75,35 @@ The package asks for `NetworkServices ReadUserData WriteUserData
 LocalServices`: loopback sockets for the first, and the message store for the
 rest.
 
+## Running in the background
+
+S60 does **not** suspend a MIDlet that loses focus or the screen: Symbian OS is
+fully multitasking and Java threads keep running, so the personality in the task
+list with the spinner is the application still alive (the spinner is its
+"running" mark, not a stalled start). `pauseApp()` is not called on
+backgrounding either. This is why the polling design works: the client opens the
+hidden menu, chooses **Go to background** (or, with the red key, keeps it in the
+background rather than closing it) and continues to poll and post.
+
+What actually ends it, in order of likelihood:
+
+* **The End key.** On S60 3rd Edition FP1 (the E51) End closes the MIDlet. The
+  `Nokia-MIDlet-No-Exit: true` manifest attribute makes End background it
+  instead, but it exists only from **FP2** and later, so it does nothing on the
+  E51.
+* **Memory.** The E51 has around 40 MB of user RAM; under pressure the OS ends
+  background applications. Nothing outside the process can prevent that, and a
+  resident helper would make it worse by taking RAM itself.
+* **The task manager**, or rebooting the phone.
+
+There is no external way to keep a process alive on Symbian: "killing" is the
+OS reclaiming memory, not a permission a helper can hold. A watchdog could only
+notice afterwards and restart the MIDlet (the notification state lives in RMS,
+so a restart is safe), but it would need a resident native process, boot-time
+autostart and App Manager launches; on a 40 MB phone that trade is not worth it.
+The clients therefore restart cleanly and resume from their last seen message
+IDs.
+
 ## Build
 
 Everything runs in Docker; no SDK on the host. The image installs the
@@ -83,14 +112,19 @@ SHA-256, and is for building locally from a legally obtained copy only.
 
 ```
 docker build -f docker/Dockerfile -t notihelper-sdk .
-docker build -f docker/Dockerfile.signtool -t notihelper-sdk:signfix .
 chmod 777 out
-docker run --rm -v "$PWD:/src:ro" -v "$PWD/out:/out" notihelper-sdk:signfix
+docker run --rm -v "$PWD:/src:ro" -v "$PWD/out:/out" notihelper-sdk
 ```
 
 `out/NotiHelper.sisx` is signed with a generated development certificate
 (`openssl req -x509 -newkey rsa:2048`), which is why the phone needs the
 installer patch.
+
+GitHub Actions runs exactly this on every push and tag
+(`.github/workflows/build.yml`), verifies the signature with `signsis`,
+publishes the `.sisx` plus `SHA256SUMS` as an artifact and updates the release
+tagged `v<version>`. The 3.7 GB SDK image is cached between runs; a first cold
+build is dominated by the Internet Archive download.
 
 With an S60 3rd FP1 SDK already installed on Windows or Linux, `./build.sh`
 does the same in place.
@@ -105,8 +139,8 @@ Three GnuPoc/OpenSSL 1.1 problems had to be solved before this produced a file:
    `ERR_GET_FUNC(err) == PEM_F_PEM_READ_BIO`, but OpenSSL 1.1 removed the
    function code from the error queue, so the comparison never matches and the
    normal end-of-input error is treated as a corrupt certificate.
-   `docker/Dockerfile.signtool` rebuilds the tool with the library+reason check
-   only.
+   `docker/Dockerfile` drops that comparison and keeps the library+reason check
+   before building the tools.
 2. **`openssl dsaparam -genkey` fails** in the image, so the certificate is RSA,
    which `signsis` accepts just as well.
 3. **`makesis`/`signsis` reject a bare output filename** (`invalid destination
@@ -123,17 +157,20 @@ name.
 
 ## Status and limits
 
-Built, linked against the real Avkon and Messaging libraries, and signed - but
-**not run on a handset** in this repository's development. Nothing here can
-execute S60 3.1.
+Built by GitHub Actions on every push, linked against the real Avkon and
+Messaging libraries, and signed - but **not run on a handset** in this
+repository's development. Nothing here can execute S60 3.1, so the runtime
+behaviour of the messaging store write is the one thing still to confirm.
 
 What is known to be outside its reach:
 
 * The note cannot be tapped to open the application; S60's global note API has
   no action callback.
-* There is no push. The MIDlet polls, and if the phone suspends Java threads
-  while the display is off, nothing arrives until it resumes.
+* There is no push. The MIDlet polls every 1, 5 or 15 minutes, and the intervals
+  are as accurate as the phone lets a background thread be.
 * Only loopback: another device cannot post to it.
+* It cannot keep a MIDlet alive. See "Running in the background" above: the OS
+  keeps it running by itself, and only RAM pressure, End or a reboot end it.
 
 ## License
 
