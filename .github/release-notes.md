@@ -1,6 +1,15 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.2**
+
+1.0.1 was signed with an RSA-2048/SHA-256 development certificate, which S60
+3rd cannot validate: Symbian 9.x before v9.5 only implements MD5 and SHA-1, and
+the installer reports such a package as damaged ("archivo dañado"/"file
+corrupted") even though its checksums are correct. The certificate is now
+RSA-1024/SHA-1 with no X.509 extensions, matching what the SDK's makekeys
+produces.
+
 **Install**
 
 1. Requires Open4All and the installserver patch: the package is signed with a
