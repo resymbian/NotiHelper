@@ -1,5 +1,10 @@
 &EN
-#{"NotiHelper"},(0xA0000D15),1,0,2
+#{"NotiHelper"},(0xA0000D15),1,0,3
+
+; S60 3.1 (E51) and S60 3.2. Without a platform dependency the installer
+; cannot match the package to the phone and warns that it is incompatible.
+[0x102032BE],0,0,0,{"S60ProductID"}
+[0x102752AE],0,0,0,{"S60ProductID"}
 
 %{"Resymbian"}
 :"Resymbian"

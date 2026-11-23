@@ -42,6 +42,10 @@ makesis ./NotiHelper.pkg ./NotiHelper_unsigned.sis
 # the installer reject the package as corrupt. The same goes for the extra
 # basicConstraints/subjectKeyIdentifier extensions OpenSSL adds by default;
 # the SDK's makekeys emits a bare certificate and the installer expects that.
+#
+# The validity starts in 2000 on purpose: an E51 whose RTC has reset has a
+# clock years in the past, and a certificate that only becomes valid at build
+# time is rejected as "not valid yet".
 if [ ! -f discofi.key ] || [ ! -f discofi.cer ]; then
     cat > /tmp/req.cnf <<'EOF'
 [req]
@@ -49,10 +53,32 @@ prompt = no
 distinguished_name = dn
 [dn]
 EOF
-    openssl req -x509 -newkey rsa:1024 -nodes -sha1 -days 3650 -set_serial 1 \
-        -keyout discofi.key -out discofi.cer -config /tmp/req.cnf \
+    cat > /tmp/ca.cnf <<'EOF'
+[ca]
+default_ca = CA_default
+[CA_default]
+dir = /tmp/ca
+database = $dir/index.txt
+new_certs_dir = $dir/newcerts
+serial = $dir/serial
+default_md = sha1
+policy = policy_any
+[policy_any]
+commonName = optional
+organizationName = optional
+organizationalUnitName = optional
+countryName = optional
+EOF
+    mkdir -p /tmp/ca/newcerts
+    : > /tmp/ca/index.txt
+    echo 01 > /tmp/ca/serial
+    openssl req -new -newkey rsa:1024 -nodes -keyout discofi.key \
+        -out /tmp/ca/req.csr -config /tmp/req.cnf \
         -subj "/CN=NotiHelper/OU=Resymbian/O=Resymbian/C=ES"
-    rm /tmp/req.cnf
+    openssl ca -selfsign -batch -notext -config /tmp/ca.cnf \
+        -keyfile discofi.key -in /tmp/ca/req.csr -out discofi.cer \
+        -startdate 000101000000Z -enddate 491231235959Z >/dev/null
+    rm -rf /tmp/ca /tmp/req.cnf /tmp/ca.cnf
 fi
 
 signsis ./NotiHelper_unsigned.sis ./NotiHelper.sisx \

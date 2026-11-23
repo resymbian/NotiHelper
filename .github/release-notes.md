@@ -1,6 +1,16 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.3**
+
+1.0.2 got past the installer's signature check but the phone still called it
+incompatible and refused to install. The package now declares the S60 3.1
+(`0x102032BE`) and S60 3.2 (`0x102752AE`) platform IDs, so the installer can
+match it to the E51 instead of asking whether to install an incompatible
+application. The development certificate also becomes valid in 2000 rather than
+at build time, so an E51 whose clock has reset does not reject it as "not valid
+yet". No code changes.
+
 **Changes in 1.0.2**
 
 1.0.1 was signed with an RSA-2048/SHA-256 development certificate, which S60

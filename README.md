@@ -117,12 +117,17 @@ docker run --rm -v "$PWD:/src:ro" -v "$PWD/out:/out" notihelper-sdk
 ```
 
 `out/NotiHelper.sisx` is signed with a generated development certificate
-(`openssl req -x509 -newkey rsa:1024 -sha1`), which is why the phone needs the
+(`openssl ca -selfsign`, RSA-1024, SHA-1), which is why the phone needs the
 installer patch. The certificate is deliberately RSA-1024/SHA-1 with no X.509
 extensions: S60 3rd's certificate manager only implements MD5 and SHA-1 (it is
 Symbian OS 9.2, and SHA-256 only arrived with the v9.5 CryptoSPI), so a
 SHA-256-signed certificate is rejected as a corrupt package. `makekeys` from the
-SDK produces the same kind of bare certificate.
+SDK produces the same kind of bare certificate. Its validity starts in 2000 so
+that a phone whose real-time clock has reset still accepts it.
+
+The package declares the S60 3.1 (`0x102032BE`) and S60 3.2 (`0x102752AE`)
+platform IDs. Without them the installer cannot match the package to the phone
+and asks whether to install an incompatible application.
 
 GitHub Actions runs exactly this on every push and tag
 (`.github/workflows/build.yml`), verifies the signature with `signsis`,
