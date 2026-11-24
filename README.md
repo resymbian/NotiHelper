@@ -66,19 +66,26 @@ arrival.
 2. Install `NotiHelper.sisx` (release asset, or built below). The UID is
    `0xA0000D15`; an older `DiscofiNotify` install is replaced, not duplicated.
 3. **NotiHelper** appears in the application menu (registration resources are
-   installed). Open it once after each reboot. It has no UI of its own: a
-   `NotiHelper: Started` note confirms the process launched, and it then stays
-   alive as the loopback listener. Versions before 1.0.5 installed the EXE
-   without registering it, so there was no icon to open.
+   installed). Open it once after each reboot. It has no visible UI: a
+   `NotiHelper: Started` note confirms the process launched, it sends itself to
+   the background and its menu icon shows the running spinner while the
+   loopback listener stays alive. Versions before 1.0.5 installed the EXE
+   without registering it, so there was no icon to open. Versions before 1.0.8
+   were bare EXEs, so the shell did not keep a task for them and the listener
+   was often gone by the time a client connected (`-34`).
 4. In the client: ResyGram **Settings → Notifications** then **Test
-   notification** in the chat list menu; Discofi **Settings → Notifications →
-   Send test notification**. A note appears and the same text is in Inbox.
+   notification** in the Settings menu or the chat list menu; Discofi
+   **Settings → Notifications → Send test notification**. A note appears and
+   the same text is in Inbox.
 
-If the menu entry does nothing, open `C:\Data\NotiHelper.log` with the file
-manager (Open4All must be active). It is overwritten on every start and shows
-`listening` when the agent is ready. A later `msv=<code>` line is not fatal: it
-only means the Inbox copy is unavailable; the note and the client reply still
-work. Any other failing stage names itself with its Symbian error code.
+If the menu entry does nothing, open `C:\Data\NotiHelper.txt` (copy/rename
+`C:\Data\NotiHelper.log` if your file manager will not open `.log`) with the
+file manager (Open4All must be active). It is overwritten on every start and
+shows `listening` when the agent is ready. A later `msv=<code>` line is not
+fatal: it only means the Inbox copy is unavailable; the note and the client
+reply still work. Any other failing stage names itself with its Symbian error
+code. Up to 1.0.7 the log was written as raw 16-bit characters, so `listening`
+appeared as `l?i?s?t?e`; 1.0.8 writes plain ASCII.
 
 The package asks for `NetworkServices ReadUserData WriteUserData
 LocalServices`: loopback sockets for the first, and the message store for the
@@ -93,6 +100,13 @@ list with the spinner is the application still alive (the spinner is its
 backgrounding either. This is why the polling design works: the client opens the
 hidden menu, chooses **Go to background** (or, with the red key, keeps it in the
 background rather than closing it) and continues to poll and post.
+
+NotiHelper itself has that spinner too, from version 1.0.8: it is a real S60 GUI
+application with an empty AppUi that immediately sends itself to the background.
+If its icon does not show the spinner, the listener is not running and Discofi
+will get `-34` (`KErrCouldNotConnect`) when it tries to post. A bare EXE cannot
+show a spinner because it has no window group/task entry, which was the cause of
+the earlier "log says listening but no agent answers" reports.
 
 What actually ends it, in order of likelihood:
 

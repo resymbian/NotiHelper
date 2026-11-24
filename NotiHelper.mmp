@@ -25,6 +25,12 @@ LIBRARY efsrv.lib
 LIBRARY estlib.lib
 LIBRARY esock.lib
 LIBRARY insock.lib
+LIBRARY apparc.lib
+LIBRARY cone.lib
+LIBRARY ws32.lib
+LIBRARY apgrfx.lib
+LIBRARY eikcore.lib
+LIBRARY avkon.lib
 LIBRARY aknnotify.lib
 LIBRARY eiksrv.lib
 LIBRARY bafl.lib

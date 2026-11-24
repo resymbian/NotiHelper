@@ -24,6 +24,13 @@
  * (SMS-SUBMIT) PDU, which is not what a received notification is.
  *
  * Build with native/e51/docker (GnuPoc toolchain + S60 SDK). See README.md.
+ *
+ * The process is a real S60 GUI application, not a bare EXE. The App Arc
+ * registration gives it a menu icon and a task-list entry: launching it puts
+ * the listener in a worker thread and sends the (empty) app UI to the
+ * background, so the icon shows the running spinner. A bare EXE ran the socket
+ * loop but the shell did not keep a task for it, and the process was usually
+ * gone by the time a client tried to connect (KErrCouldNotConnect, -34).
  */
 
 #include <e32base.h>
@@ -34,6 +41,14 @@
 #include <aknglobalnote.h>
 #include <aknnotifystd.h>
 #include <avkon.hrh>
+
+// Application framework: an S60 GUI app keeps its window group, and therefore
+// its task-list spinner, alive while the listener thread serves notifications.
+#include <aknapp.h>
+#include <akndoc.h>
+#include <aknappui.h>
+#include <apgtask.h>
+#include <eikstart.h>
 
 // Messaging: store the notification as a received SMS in Inbox.
 #include <msvapi.h>
@@ -50,6 +65,148 @@ const TUint KNotiHelperPort = 4711;
 const TUint32 KNotiHelperLoopback = INET_ADDR(127, 0, 0, 1);
 const TInt KMaxFieldLength = 512;
 const TInt KMaxNoteLength = 160;
+
+static void ServeL();
+static TInt ListenerThreadEntry(TAny* aParameter);
+
+/** S60 application: identifies the EXE and creates the document. */
+class CNotiHelperApplication : public CAknApplication
+{
+public:
+    static CApaApplication* NewApplication();
+
+private:
+    TUid AppDllUid() const;
+    CApaDocument* CreateDocumentL();
+};
+
+/** Non-file document whose only job is to create the AppUi. */
+class CNotiHelperDocument : public CAknDocument
+{
+public:
+    static CNotiHelperDocument* NewL(CEikApplication& aApp);
+    static CNotiHelperDocument* NewLC(CEikApplication& aApp);
+    ~CNotiHelperDocument();
+
+    CEikAppUi* CreateAppUiL();
+
+private:
+    CNotiHelperDocument(CEikApplication& aApp);
+    void ConstructL();
+};
+
+/**
+ * Invisible AppUi. Starting the GUI framework keeps the process in the task
+ * list; SendToBackground hides the empty view and leaves the spinner visible.
+ * The blocking socket loop runs on a worker thread so the AppUi can keep
+ * answering window-server events while notifications arrive.
+ */
+class CNotiHelperAppUi : public CAknAppUi
+{
+public:
+    void ConstructL();
+    ~CNotiHelperAppUi();
+
+    void HandleForegroundEventL(TBool aForeground);
+    void HandleCommandL(TInt aCommand);
+
+private:
+    void SendToBackground();
+    RThread iListenerThread;
+};
+
+CApaApplication* CNotiHelperApplication::NewApplication()
+{
+    return new CNotiHelperApplication;
+}
+
+TUid CNotiHelperApplication::AppDllUid() const
+{
+    return TUid::Uid(0xA0000D15);
+}
+
+CApaDocument* CNotiHelperApplication::CreateDocumentL()
+{
+    return CNotiHelperDocument::NewL(*this);
+}
+
+CNotiHelperDocument* CNotiHelperDocument::NewL(CEikApplication& aApp)
+{
+    CNotiHelperDocument* self = NewLC(aApp);
+    CleanupStack::Pop(self);
+    return self;
+}
+
+CNotiHelperDocument* CNotiHelperDocument::NewLC(CEikApplication& aApp)
+{
+    CNotiHelperDocument* self = new (ELeave) CNotiHelperDocument(aApp);
+    CleanupStack::PushL(self);
+    self->ConstructL();
+    return self;
+}
+
+CNotiHelperDocument::CNotiHelperDocument(CEikApplication& aApp)
+    : CAknDocument(aApp)
+{
+}
+
+CNotiHelperDocument::~CNotiHelperDocument()
+{
+}
+
+void CNotiHelperDocument::ConstructL()
+{
+}
+
+CEikAppUi* CNotiHelperDocument::CreateAppUiL()
+{
+    return new (ELeave) CNotiHelperAppUi;
+}
+
+void CNotiHelperAppUi::ConstructL()
+{
+    // No resource file and no screen furniture: there is no view to draw.
+    BaseConstructL(ENoAppResourceFile | ENoScreenFurniture);
+
+    User::LeaveIfError(iListenerThread.Create(_L("NotiHelperListener"),
+        ListenerThreadEntry, 0x10000, NULL, NULL));
+    iListenerThread.SetPriority(EPriorityNormal);
+    iListenerThread.Resume();
+
+    // A launch from the menu should not leave an empty window on screen.
+    SendToBackground();
+}
+
+CNotiHelperAppUi::~CNotiHelperAppUi()
+{
+    if (iListenerThread.Handle())
+    {
+        iListenerThread.Kill(0);
+        iListenerThread.Close();
+    }
+}
+
+void CNotiHelperAppUi::SendToBackground()
+{
+    TApaTask self(iEikonEnv->WsSession());
+    self.SetWgId(iEikonEnv->RootWin().Identifier());
+    self.SendToBackground();
+}
+
+void CNotiHelperAppUi::HandleForegroundEventL(TBool aForeground)
+{
+    CAknAppUi::HandleForegroundEventL(aForeground);
+    if (aForeground) SendToBackground();
+}
+
+void CNotiHelperAppUi::HandleCommandL(TInt aCommand)
+{
+    if (aCommand == EAknCmdExit)
+    {
+        if (iListenerThread.Handle()) iListenerThread.Kill(0);
+    }
+    CAknAppUi::HandleCommandL(aCommand);
+}
 
 /** CMsvSession requires an observer, but we do not need its events. */
 class TNullMsvObserver : public MMsvSessionObserver
@@ -291,8 +448,15 @@ static void WriteStatus(const TDesC& aText)
     if (file.Replace(fs, _L("C:\\Data\\NotiHelper.log"),
             EFileWrite | EFileShareAny) == KErrNone)
     {
-        TPtrC8 bytes((const TUint8*)aText.Ptr(), aText.Length());
+        // TDesC is 16-bit: casting its pointer to TUint8* and using Length()
+        // wrote only every other byte, so "listening" showed up as l?i?s?t?e.
+        // Copy to 8-bit first; all stage names are plain ASCII.
+        HBufC8* ascii = HBufC8::NewLC(aText.Length() + 1);
+        TPtr8 bytes = ascii->Des();
+        bytes.Copy(aText);
+        bytes.Append('\n');
         file.Write(bytes);
+        CleanupStack::PopAndDestroy(ascii);
         file.Close();
     }
     fs.Close();
@@ -381,15 +545,35 @@ static void ServeL()
     CleanupStack::PopAndDestroy(&socketServer);
 }
 
-GLDEF_C TInt E32Main()
+/** Entry point for the listener worker created by the AppUi. */
+static TInt ListenerThreadEntry(TAny* /*aParameter*/)
 {
     CTrapCleanup* cleanup = CTrapCleanup::New();
     if (cleanup == NULL) return KErrNoMemory;
+
+    CActiveScheduler* scheduler = new CActiveScheduler;
+    if (scheduler == NULL)
+    {
+        delete cleanup;
+        return KErrNoMemory;
+    }
+    CActiveScheduler::Install(scheduler);
 
     TInt result = KErrNone;
     TRAP(result, ServeL());
     WriteStatusError(_L("exit"), result);
 
+    CActiveScheduler::Install(NULL);
+    delete scheduler;
     delete cleanup;
     return result;
+}
+
+/**
+ * Run the application framework, not ServeL directly. EikStart keeps the
+ * window group, and hence the task-list spinner, alive for the whole session.
+ */
+GLDEF_C TInt E32Main()
+{
+    return EikStart::RunApplication(CNotiHelperApplication::NewApplication);
 }

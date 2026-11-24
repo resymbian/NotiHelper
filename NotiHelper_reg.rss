@@ -1,7 +1,7 @@
-// Application-menu registration for the headless EXE. Without this resource
+// Application-menu registration for the S60 GUI app. Without this resource
 // S60 installs the binary but never shows an icon, so there is no way to start
-// the loopback listener. Keep the default foreground launch: on FP1 that is
-// the path that reliably starts the process; the EXE has no UI of its own.
+// the loopback listener. The AppUi hides itself but keeps its window group,
+// which is what draws the running spinner in the application/task view.
 
 #include <appinfo.rh>
 

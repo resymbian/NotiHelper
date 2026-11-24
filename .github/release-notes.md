@@ -1,6 +1,20 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.8**
+
+Discofi's test notification failed with `SymbianOS error = -34`
+(`KErrCouldNotConnect`): the EXE wrote `listening` to its log, but the shell did
+not keep a task for a bare EXE, so the listener was gone before the client
+connected. NotiHelper is now a real S60 GUI application. Launching it starts the
+listener on a worker thread and immediately sends the empty AppUi to the
+background, so the application entry shows the running spinner and the socket
+stays open. No protocol changes.
+
+The startup log is also fixed: it used to write 16-bit descriptor bytes with a
+16-bit length, so `listening` appeared as `l?i?s?t?e`. It is now plain ASCII and
+readable from any file manager.
+
 **Changes in 1.0.7**
 
 The listener no longer waits for `CMsvSession`. The socket is opened first, so
