@@ -1,5 +1,5 @@
 &EN
-#{"NotiHelper"},(0xA0000D15),1,0,4
+#{"NotiHelper"},(0xA0000D15),1,0,5
 
 ; S60 3.1 (E51) and S60 3.2. Without a platform dependency the installer
 ; cannot match the package to the phone and warns that it is incompatible.
@@ -12,3 +12,5 @@
 ; The agent shows a note and writes an Inbox entry. Open4All is not required
 ; by either API, but is normally already active for the TLS-patched JARs.
 "NotiHelper.exe"-"!:\sys\bin\NotiHelper.exe"
+"NotiHelper.rsc"-"!:\resource\apps\NotiHelper.rsc"
+"NotiHelper_reg.rsc"-"!:\private\10003a3f\import\apps\NotiHelper_reg.rsc"

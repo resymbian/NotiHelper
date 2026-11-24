@@ -34,8 +34,14 @@ elftran -dump h "$EXE" > /tmp/NotiHelper.e32
 grep -q 'Secure ID: a0000d15' /tmp/NotiHelper.e32
 grep -Eq 'Uids:[[:space:]]+1000007a 100039ce a0000d15' /tmp/NotiHelper.e32
 
-# The .pkg references NotiHelper.exe in the current directory.
-cp "$EXE" .
+# The .pkg references these built files in the current directory. The
+# registration resource is what makes the headless EXE appear in the menu so
+# it can be started once after a reboot.
+RES="$EPOCROOT/epoc32/data/z/resource/apps/NotiHelper.rsc"
+REG="$EPOCROOT/epoc32/data/z/private/10003a3f/import/apps/NotiHelper_reg.rsc"
+[ -s "$RES" ]
+[ -s "$REG" ]
+cp "$EXE" "$RES" "$REG" .
 
 makesis ./NotiHelper.pkg ./NotiHelper_unsigned.sis
 

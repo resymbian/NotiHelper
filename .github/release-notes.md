@@ -1,6 +1,15 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.5**
+
+1.0.4 installed and signed correctly, but the package only contained the EXE
+in `\sys\bin`; S60 never registered it as an application, so there was no icon
+in the menu and the listener could not be started. The build now compiles and
+installs `NotiHelper.rsc` (the menu caption) and `NotiHelper_reg.rsc` (the
+`APP_REGISTRATION_INFO` entry). The entry launches the headless EXE in the
+background. No protocol changes.
+
 **Changes in 1.0.4**
 
 1.0.1-1.0.3 failed with the generic "imposible instalar" / "No se ha podido

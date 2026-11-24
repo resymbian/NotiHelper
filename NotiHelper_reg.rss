@@ -1,0 +1,16 @@
+// Application-menu registration for the headless EXE. Without this resource
+// S60 installs the binary but never shows an icon, so there is no way to start
+// the loopback listener. KAppLaunchInBackground keeps it from taking over the
+// screen: it only needs to run, not to draw anything.
+
+#include <appinfo.rh>
+
+UID2 KUidAppRegistrationResourceFile
+UID3 0xA0000D15
+
+RESOURCE APP_REGISTRATION_INFO
+    {
+    app_file = "NotiHelper";
+    localisable_resource_file = "\\resource\\apps\\NotiHelper";
+    launch = KAppLaunchInBackground;
+    }

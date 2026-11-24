@@ -1,22 +1,16 @@
-// Optional application-menu registration. Not wired into the default PKG,
-// because registration resource syntax varies between S60 SDK releases.
-#include <eikon.rh>
-#include <avkon.rh>
+// Name shown for the application-menu entry. The registration resource
+// (NotiHelper_reg.rss) points at this file.
+
 #include <appinfo.rh>
 
-RESOURCE RSS_SIGNATURE {}
-RESOURCE TBUF { buf = "NotiHelper"; }
-RESOURCE EIK_APP_INFO {}
-
-RESOURCE APP_REGISTRATION_INFO
+RESOURCE LOCALISABLE_APP_INFO r_localisable_app_info
     {
-    app_file = "NotiHelper";
-    localisable_resource_file = "\\resource\\apps\\NotiHelper";
-    localisable_resource_id = R_LOCALISABLE_APP_INFO;
-    }
-
-RESOURCE R_LOCALISABLE_APP_INFO
-    {
-    caption = "NotiHelper";
     short_caption = "NotiHlp";
+    caption_and_icon =
+        CAPTION_AND_ICON_INFO
+            {
+            caption = "NotiHelper";
+            number_of_icons = 0;
+            icon_file = "";
+            };
     }

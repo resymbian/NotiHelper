@@ -7,6 +7,17 @@ CAPABILITY NetworkServices ReadUserData WriteUserData LocalServices
 SOURCEPATH .
 SOURCE NotiHelper.cpp
 
+SOURCEPATH .
+START RESOURCE NotiHelper.rss
+HEADER
+TARGETPATH /resource/apps
+END
+
+SOURCEPATH .
+START RESOURCE NotiHelper_reg.rss
+TARGETPATH /private/10003a3f/import/apps
+END
+
 SYSTEMINCLUDE \epoc32\include
 
 LIBRARY euser.lib

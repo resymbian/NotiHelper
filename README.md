@@ -65,8 +65,10 @@ arrival.
    self-signed.
 2. Install `NotiHelper.sisx` (release asset, or built below). The UID is
    `0xA0000D15`; an older `DiscofiNotify` install is replaced, not duplicated.
-3. Launch **NotiHelper** once after each reboot. It has no UI - it only starts
-   the loopback listener.
+3. **NotiHelper** now appears in the application menu (registration resources
+   are installed). Open it once after each reboot. It has no UI - selecting it
+   only starts the loopback listener in the background. Versions before 1.0.5
+   installed the EXE without registering it, so there was no icon to open.
 4. In the client: ResyGram **Settings → Notifications** then **Test
    notification** in the chat list menu; Discofi **Settings → Notifications →
    Send test notification**. A note appears and the same text is in Inbox.
