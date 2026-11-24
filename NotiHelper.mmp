@@ -1,6 +1,6 @@
 TARGET NotiHelper.exe
 TARGETTYPE exe
-UID 0xA0000D15
+UID 0x100039CE 0xA0000D15
 
 CAPABILITY NetworkServices ReadUserData WriteUserData LocalServices
 

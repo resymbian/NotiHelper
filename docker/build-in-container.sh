@@ -26,8 +26,16 @@ cd "$WORK"
 bldmake bldfiles
 abld build gcce urel
 
+# A single-value UID in the .mmp becomes UID2 and leaves the E32 Secure ID at
+# zero. S60 rejects such a package with the generic "Unable to install", so
+# check the UID triple before packaging: executable, KUidApp, our SID.
+EXE="$EPOCROOT/epoc32/release/gcce/urel/NotiHelper.exe"
+elftran -dump h "$EXE" > /tmp/NotiHelper.e32
+grep -q 'Secure ID: a0000d15' /tmp/NotiHelper.e32
+grep -Eq 'Uids:[[:space:]]+1000007a 100039ce a0000d15' /tmp/NotiHelper.e32
+
 # The .pkg references NotiHelper.exe in the current directory.
-cp "$EPOCROOT/epoc32/release/gcce/urel/NotiHelper.exe" .
+cp "$EXE" .
 
 makesis ./NotiHelper.pkg ./NotiHelper_unsigned.sis
 

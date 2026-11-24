@@ -1,6 +1,16 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.4**
+
+1.0.1-1.0.3 failed with the generic "imposible instalar" / "No se ha podido
+instalar" because the EXE inside the package had an invalid E32 UID triple.
+`NotiHelper.mmp` declared a single UID, which the toolchain used as UID2 and
+left the Secure ID (UID3) at `0x00000000`; S60's installer rejects non-GUI
+executables without an explicit SID. The MMP now declares
+`UID 0x100039CE 0xA0000D15` (KUidApp as UID2, `0xA0000D15` as SID), and the
+build verifies the E32 header before signing. No protocol changes.
+
 **Changes in 1.0.3**
 
 1.0.2 got past the installer's signature check but the phone still called it
