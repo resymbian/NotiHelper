@@ -1,6 +1,22 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.6**
+
+The 1.0.5 menu entry appeared but the process did not stay running, so Discofi
+still reported that no native agent had answered. Two changes make this
+diagnosable and use the known-good launch path:
+
+- removed `KAppLaunchInBackground` from the registration resource; FP1's
+  launcher reliably starts the process with the default foreground launch;
+- the EXE now shows a `NotiHelper: Started` note and writes a startup trace to
+  `C:\Data\NotiHelper.log` (`start`, `note=0`, `msv=ok`, `listening`, or the
+  first failing stage with its error code).
+
+If the note appears but Discofi still fails, open `C:\Data\NotiHelper.log` with
+the file manager and send its contents; it will show exactly which step fails.
+No protocol changes.
+
 **Changes in 1.0.5**
 
 1.0.4 installed and signed correctly, but the package only contained the EXE

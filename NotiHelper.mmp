@@ -21,6 +21,7 @@ END
 SYSTEMINCLUDE \epoc32\include
 
 LIBRARY euser.lib
+LIBRARY efsrv.lib
 LIBRARY estlib.lib
 LIBRARY esock.lib
 LIBRARY insock.lib

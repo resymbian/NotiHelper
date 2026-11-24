@@ -65,13 +65,19 @@ arrival.
    self-signed.
 2. Install `NotiHelper.sisx` (release asset, or built below). The UID is
    `0xA0000D15`; an older `DiscofiNotify` install is replaced, not duplicated.
-3. **NotiHelper** now appears in the application menu (registration resources
-   are installed). Open it once after each reboot. It has no UI - selecting it
-   only starts the loopback listener in the background. Versions before 1.0.5
-   installed the EXE without registering it, so there was no icon to open.
+3. **NotiHelper** appears in the application menu (registration resources are
+   installed). Open it once after each reboot. It has no UI of its own: a
+   `NotiHelper: Started` note confirms the process launched, and it then stays
+   alive as the loopback listener. Versions before 1.0.5 installed the EXE
+   without registering it, so there was no icon to open.
 4. In the client: ResyGram **Settings → Notifications** then **Test
    notification** in the chat list menu; Discofi **Settings → Notifications →
    Send test notification**. A note appears and the same text is in Inbox.
+
+If the menu entry does nothing, open `C:\Data\NotiHelper.log` with the file
+manager (Open4All must be active). It is overwritten on every start and ends
+with `listening` when the agent is ready; otherwise it names the stage that
+failed and the Symbian error code.
 
 The package asks for `NetworkServices ReadUserData WriteUserData
 LocalServices`: loopback sockets for the first, and the message store for the

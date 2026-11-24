@@ -28,6 +28,7 @@
 
 #include <e32base.h>
 #include <e32std.h>
+#include <f32file.h>
 #include <es_sock.h>
 #include <in_sock.h>
 #include <aknglobalnote.h>
@@ -274,26 +275,76 @@ static void AnswerL(RSocket& aSocket, TBool aOk)
     User::LeaveIfError(status.Int());
 }
 
+/**
+ * Minimal startup trace. A headless EXE has no console on the phone, so the
+ * only way to tell whether it reached the listener is a file the user can open
+ * from the file manager (with Open4All active). Overwritten on every start.
+ */
+static void WriteStatus(const TDesC& aText)
+{
+    RFs fs;
+    if (fs.Connect() != KErrNone) return;
+
+    RFile file;
+    if (file.Replace(fs, _L("C:\\Data\\NotiHelper.log"),
+            EFileWrite | EFileShareAny) == KErrNone)
+    {
+        TPtrC8 bytes((const TUint8*)aText.Ptr(), aText.Length());
+        file.Write(bytes);
+        file.Close();
+    }
+    fs.Close();
+}
+
+static void WriteStatusError(const TDesC& aStage, TInt aError)
+{
+    TBuf<128> line(aStage);
+    line.Append(_L("="));
+    line.AppendNum(aError);
+    WriteStatus(line);
+}
+
+static void LeaveStatusL(TInt aError, const TDesC& aStage)
+{
+    if (aError != KErrNone)
+    {
+        WriteStatusError(aStage, aError);
+        User::Leave(aError);
+    }
+}
+
 static void ServeL()
 {
+    WriteStatus(_L("start"));
+
+    // Visible proof that the menu entry really launched the process. If this
+    // note appears but the log stops at msv=..., the failure is in Messaging.
+    TRAPD(noteError, ShowNotificationL(_L("NotiHelper"), _L("Started")));
+    WriteStatusError(_L("note"), noteError);
+
     TNullMsvObserver msvObserver;
-    CMsvSession* messages = CMsvSession::OpenSyncL(msvObserver);
+    CMsvSession* messages = NULL;
+    TRAPD(msvError, messages = CMsvSession::OpenSyncL(msvObserver));
+    LeaveStatusL(msvError, _L("msv"));
     CleanupStack::PushL(messages);
+    WriteStatus(_L("msv=ok"));
 
     RSocketServ socketServer;
-    User::LeaveIfError(socketServer.Connect());
+    LeaveStatusL(socketServer.Connect(), _L("socketsrv"));
     CleanupClosePushL(socketServer);
 
     RSocket listener;
-    User::LeaveIfError(listener.Open(socketServer, KAfInet, KSockStream,
-        KProtocolInetTcp));
+    LeaveStatusL(listener.Open(socketServer, KAfInet, KSockStream,
+        KProtocolInetTcp), _L("socketopen"));
     CleanupClosePushL(listener);
 
     TInetAddr address;
     address.SetAddress(KNotiHelperLoopback);
     address.SetPort(KNotiHelperPort);
-    User::LeaveIfError(listener.Bind(address));
-    User::LeaveIfError(listener.Listen(4));
+    LeaveStatusL(listener.Bind(address), _L("bind"));
+    LeaveStatusL(listener.Listen(4), _L("listen"));
+
+    WriteStatus(_L("listening"));
 
     for (;;)
     {
@@ -326,6 +377,7 @@ GLDEF_C TInt E32Main()
 
     TInt result = KErrNone;
     TRAP(result, ServeL());
+    WriteStatusError(_L("exit"), result);
 
     delete cleanup;
     return result;
