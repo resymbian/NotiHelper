@@ -62,7 +62,13 @@
 #include <txtfmlyr.h>
 
 const TUint KNotiHelperPort = 4711;
-const TUint32 KNotiHelperLoopback = INET_ADDR(127, 0, 0, 1);
+
+// Bind to every local interface, not just 127.0.0.1. On some S60 builds the
+// J2ME runtime routes a literal 127.0.0.1 through the selected IAP or an IPv6
+// mapped loopback, which a loopback-only listener never sees and the client
+// reports as KErrCouldNotConnect (-34). Accept is still restricted to loopback,
+// so the port is never reachable from the network.
+const TUint32 KNotiHelperBindAddress = KInetAddrAny;
 const TInt KMaxFieldLength = 512;
 const TInt KMaxNoteLength = 160;
 
@@ -445,19 +451,43 @@ static void AnswerL(RSocket& aSocket, TBool aOk)
 }
 
 /**
- * Minimal startup trace. A headless EXE has no console on the phone, so the
- * only way to tell whether it reached the listener is a file the user can open
- * from the file manager (with Open4All active). Overwritten on every start.
+ * Startup/connection trace. There is no console on the phone, so the only way
+ * to see where the agent stopped is a file the user can open from the file
+ * manager (with Open4All active). The log accumulates all stages of one run;
+ * ClearStatus() truncates it once when ServeL starts.
  */
+static void ClearStatus()
+{
+    RFs fs;
+    if (fs.Connect() != KErrNone) return;
+
+    RFile file;
+    file.Replace(fs, _L("C:\\Data\\NotiHelper.log"),
+        EFileWrite | EFileShareAny);
+    file.Close();
+    fs.Close();
+}
+
 static void WriteStatus(const TDesC& aText)
 {
     RFs fs;
     if (fs.Connect() != KErrNone) return;
 
     RFile file;
-    if (file.Replace(fs, _L("C:\\Data\\NotiHelper.log"),
-            EFileWrite | EFileShareAny) == KErrNone)
+    TInt error = file.Open(fs, _L("C:\\Data\\NotiHelper.log"),
+        EFileWrite | EFileShareAny);
+    if (error == KErrNotFound)
     {
+        error = file.Create(fs, _L("C:\\Data\\NotiHelper.log"),
+            EFileWrite | EFileShareAny);
+    }
+
+    if (error == KErrNone)
+    {
+        TInt size = 0;
+        file.Size(size);
+        file.Seek(ESeekEnd, size);
+
         // TDesC is 16-bit: casting its pointer to TUint8* and using Length()
         // wrote only every other byte, so "listening" showed up as l?i?s?t?e.
         // Copy to 8-bit first; all stage names are plain ASCII.
@@ -491,6 +521,8 @@ static void LeaveStatusL(TInt aError, const TDesC& aStage)
 
 static void ServeL()
 {
+    ClearStatus();
+    WriteStatus(_L("boot"));
     WriteStatus(_L("start"));
 
     // Visible proof that the menu entry really launched the process.
@@ -508,12 +540,10 @@ static void ServeL()
         KProtocolInetTcp), _L("socketopen"));
     CleanupClosePushL(listener);
 
-    TInetAddr address;
-    address.SetAddress(KNotiHelperLoopback);
-    address.SetPort(KNotiHelperPort);
+    TInetAddr address(KNotiHelperBindAddress, KNotiHelperPort);
     LeaveStatusL(listener.Bind(address), _L("bind"));
+    WriteStatus(_L("bind=any"));
     LeaveStatusL(listener.Listen(4), _L("listen"));
-
     WriteStatus(_L("listening"));
 
     TNullMsvObserver msvObserver;
@@ -537,15 +567,32 @@ static void ServeL()
         TRequestStatus acceptStatus;
         listener.Accept(connection, acceptStatus);
         User::WaitForRequest(acceptStatus);
-        if (acceptStatus.Int() != KErrNone) continue;
+        if (acceptStatus.Int() != KErrNone)
+        {
+            WriteStatusError(_L("accept"), acceptStatus.Int());
+            continue;
+        }
+        WriteStatus(_L("accept"));
         CleanupClosePushL(connection);
+
+        // The wildcard bind is only for compatibility with the J2ME routing.
+        // Never act on a request that did not come from this device.
+        TInetAddr remote;
+        connection.RemoteName(remote);
+        if (!remote.IsLoopback())
+        {
+            WriteStatus(_L("reject=remote"));
+            CleanupStack::PopAndDestroy(&connection);
+            continue;
+        }
+        WriteStatus(_L("remote=loopback"));
 
         TBool ok = EFalse;
         TRAPD(handlerError, HandleConnectionL(messages, connection, ok));
-        (void)handlerError;
+        WriteStatusError(_L("handler"), handlerError);
 
         TRAPD(answerError, AnswerL(connection, ok));
-        (void)answerError;
+        WriteStatusError(_L("reply"), answerError);
 
         CleanupStack::PopAndDestroy(&connection);
     }

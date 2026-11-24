@@ -1,6 +1,20 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.0**
+
+1.0.9 kept the process alive and showed the spinner, but Discofi still got
+`SymbianOS error = -34` (`KErrCouldNotConnect`) even though the log reached
+`msv=ok`. On some S60 builds the J2ME runtime routes a literal `127.0.0.1`
+through the selected IAP or an IPv6-mapped loopback, which a listener bound only
+to IPv4 `127.0.0.1` never sees. The listener now binds to all local interfaces
+(`0.0.0.0`) and explicitly rejects any connection whose remote address is not
+loopback, so it stays local-only in practice.
+
+The log is now cumulative: delete `C:\Data\NotiHelper.log`, start the app, and
+it should show `boot`, `start`, `bind=any`, `listening`, `msv=ok`, and then
+`accept` / `remote=loopback` / `reply=0` for each client request.
+
 **Changes in 1.0.9**
 
 1.0.8 turned NotiHelper into an S60 GUI app but omitted

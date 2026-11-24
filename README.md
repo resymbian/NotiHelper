@@ -80,12 +80,14 @@ arrival.
 
 If the menu entry does nothing, open `C:\Data\NotiHelper.txt` (copy/rename
 `C:\Data\NotiHelper.log` if your file manager will not open `.log`) with the
-file manager (Open4All must be active). It is overwritten on every start and
-shows `listening` when the agent is ready. A later `msv=<code>` line is not
+file manager (Open4All must be active). From 1.1.0 the log is cleared once at
+startup and then accumulates every stage of that run: `boot`, `start`,
+`bind=any`, `listening`, `msv=ok`, and one `accept` / `remote=loopback` /
+`reply=0` group per request. A `msv=<code>` line other than `msv=ok` is not
 fatal: it only means the Inbox copy is unavailable; the note and the client
 reply still work. Any other failing stage names itself with its Symbian error
 code. Up to 1.0.7 the log was written as raw 16-bit characters, so `listening`
-appeared as `l?i?s?t?e`; 1.0.8 writes plain ASCII.
+appeared as `l?i?s?t?e`; 1.0.8 and newer write plain ASCII.
 
 The package asks for `NetworkServices ReadUserData WriteUserData
 LocalServices`: loopback sockets for the first, and the message store for the
