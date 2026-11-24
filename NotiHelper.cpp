@@ -243,7 +243,7 @@ static void ShowNotificationL(const TDesC& aTitle, const TDesC& aText)
     CleanupStack::PopAndDestroy(note);
 }
 
-static void HandleConnectionL(CMsvSession& aSession, RSocket& aConnection,
+static void HandleConnectionL(CMsvSession* aSession, RSocket& aConnection,
     TBool& aOk)
 {
     HBufC* title = ReadUtfL(aConnection);
@@ -253,12 +253,14 @@ static void HandleConnectionL(CMsvSession& aSession, RSocket& aConnection,
 
     ShowNotificationL(*title, *text);
 
-    // The Inbox entry is the part that survives the note. A messaging write can
-    // fail - no SMS service configured, the server refusing the store - and
-    // that must not turn a shown note into an error answer.
-    TRAPD(inboxError, CreateInboxSmsL(aSession, *title, *text));
+    // The Inbox entry is secondary. The agent must answer even when Messaging
+    // is unavailable, otherwise the client reports that no agent is running.
+    if (aSession != NULL)
+    {
+        TRAPD(inboxError, CreateInboxSmsL(*aSession, *title, *text));
+        (void)inboxError;
+    }
     aOk = ETrue;
-    (void)inboxError;
 
     CleanupStack::PopAndDestroy(text);
     CleanupStack::PopAndDestroy(title);
@@ -317,18 +319,12 @@ static void ServeL()
 {
     WriteStatus(_L("start"));
 
-    // Visible proof that the menu entry really launched the process. If this
-    // note appears but the log stops at msv=..., the failure is in Messaging.
+    // Visible proof that the menu entry really launched the process.
     TRAPD(noteError, ShowNotificationL(_L("NotiHelper"), _L("Started")));
     WriteStatusError(_L("note"), noteError);
 
-    TNullMsvObserver msvObserver;
-    CMsvSession* messages = NULL;
-    TRAPD(msvError, messages = CMsvSession::OpenSyncL(msvObserver));
-    LeaveStatusL(msvError, _L("msv"));
-    CleanupStack::PushL(messages);
-    WriteStatus(_L("msv=ok"));
-
+    // Bring up the listener first. The client only needs the socket and the
+    // note; Messaging is an optional second copy of the notification.
     RSocketServ socketServer;
     LeaveStatusL(socketServer.Connect(), _L("socketsrv"));
     CleanupClosePushL(socketServer);
@@ -346,6 +342,21 @@ static void ServeL()
 
     WriteStatus(_L("listening"));
 
+    TNullMsvObserver msvObserver;
+    CMsvSession* messages = NULL;
+    TRAPD(msvError, messages = CMsvSession::OpenSyncL(msvObserver));
+    if (msvError == KErrNone && messages != NULL)
+    {
+        CleanupStack::PushL(messages);
+        WriteStatus(_L("msv=ok"));
+    }
+    else
+    {
+        // Do not leave: a broken message store must not kill the note bridge.
+        WriteStatusError(_L("msv"), msvError);
+        messages = NULL;
+    }
+
     for (;;)
     {
         RSocket connection;
@@ -356,7 +367,7 @@ static void ServeL()
         CleanupClosePushL(connection);
 
         TBool ok = EFalse;
-        TRAPD(handlerError, HandleConnectionL(*messages, connection, ok));
+        TRAPD(handlerError, HandleConnectionL(messages, connection, ok));
         (void)handlerError;
 
         TRAPD(answerError, AnswerL(connection, ok));
@@ -365,9 +376,9 @@ static void ServeL()
         CleanupStack::PopAndDestroy(&connection);
     }
 
+    if (messages != NULL) CleanupStack::PopAndDestroy(messages);
     CleanupStack::PopAndDestroy(&listener);
     CleanupStack::PopAndDestroy(&socketServer);
-    CleanupStack::PopAndDestroy(messages);
 }
 
 GLDEF_C TInt E32Main()

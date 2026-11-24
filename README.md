@@ -75,9 +75,10 @@ arrival.
    Send test notification**. A note appears and the same text is in Inbox.
 
 If the menu entry does nothing, open `C:\Data\NotiHelper.log` with the file
-manager (Open4All must be active). It is overwritten on every start and ends
-with `listening` when the agent is ready; otherwise it names the stage that
-failed and the Symbian error code.
+manager (Open4All must be active). It is overwritten on every start and shows
+`listening` when the agent is ready. A later `msv=<code>` line is not fatal: it
+only means the Inbox copy is unavailable; the note and the client reply still
+work. Any other failing stage names itself with its Symbian error code.
 
 The package asks for `NetworkServices ReadUserData WriteUserData
 LocalServices`: loopback sockets for the first, and the message store for the

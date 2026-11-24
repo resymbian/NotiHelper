@@ -1,6 +1,14 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.7**
+
+The listener no longer waits for `CMsvSession`. The socket is opened first, so
+a messaging-store failure can only remove the Inbox copy of a notification: the
+system note and the acknowledgement byte still work, which is what Discofi and
+ResyGram need. The startup log now records `listening` before the `msv=...`
+line, so a failed message store can no longer look like "no agent started".
+
 **Changes in 1.0.6**
 
 The 1.0.5 menu entry appeared but the process did not stay running, so Discofi
