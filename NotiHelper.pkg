@@ -1,5 +1,5 @@
 &EN
-#{"NotiHelper"},(0xA0000D15),1,0,8
+#{"NotiHelper"},(0xA0000D15),1,0,9
 
 ; S60 3.1 (E51) and S60 3.2. Without a platform dependency the installer
 ; cannot match the package to the phone and warns that it is incompatible.

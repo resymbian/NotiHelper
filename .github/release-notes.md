@@ -1,6 +1,16 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.0.9**
+
+1.0.8 turned NotiHelper into an S60 GUI app but omitted
+`CEikApplication::ResourceFileName()`. With `ENoAppResourceFile` App Arc still
+tried to open a default application resource, so launching the icon failed with
+a generic "system error" before the listener thread or the log could start.
+The application now returns an empty resource filename, as the SDK's minimal
+resource-less GUI example requires. Reboot after installing if 1.0.8 was
+already opened once.
+
 **Changes in 1.0.8**
 
 Discofi's test notification failed with `SymbianOS error = -34`

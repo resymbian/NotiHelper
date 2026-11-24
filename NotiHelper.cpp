@@ -78,6 +78,11 @@ public:
 private:
     TUid AppDllUid() const;
     CApaDocument* CreateDocumentL();
+
+    // ENoAppResourceFile requires an empty name, otherwise App Arc tries to
+    // open a non-existent application resource and the launch dies with a
+    // generic system error before ConstructL (and before the log is written).
+    TFileName ResourceFileName() const;
 };
 
 /** Non-file document whose only job is to create the AppUi. */
@@ -128,6 +133,11 @@ TUid CNotiHelperApplication::AppDllUid() const
 CApaDocument* CNotiHelperApplication::CreateDocumentL()
 {
     return CNotiHelperDocument::NewL(*this);
+}
+
+TFileName CNotiHelperApplication::ResourceFileName() const
+{
+    return TFileName();
 }
 
 CNotiHelperDocument* CNotiHelperDocument::NewL(CEikApplication& aApp)
