@@ -1,6 +1,12 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.3**
+
+Fix `handler=-25` (`KErrEof`) on accepted incoming connections:
+
+* Replaced `RSocket::Read` on uninitialized chunk descriptors with `RSocket::RecvOneOrMore` using an explicit `TSockXfrLength` parameter. S60 3rd's TCP implementation on stream sockets does not reliably update the descriptor length on `Read`, causing `ReadExactL` to treat a successful receive as zero bytes and leave with `-25` (`KErrEof`).
+
 **Changes in 1.1.2**
 
 Fix the root cause of `SymbianOS error = -34` (`KErrCouldNotConnect`):

@@ -235,7 +235,7 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** RSocket::Read until the descriptor is full. */
+/** Read until the descriptor buffer is full. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
     TInt offset = 0;
@@ -243,18 +243,20 @@ static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 
     while (offset < maxLength)
     {
-        TPtr8 chunk = aBuffer.MidTPtr(offset);
+        TPtr8 chunk(const_cast<TUint8*>(aBuffer.Ptr()) + offset, 0, maxLength - offset);
+        TSockXfrLength len;
         TRequestStatus status;
-        aSocket.Read(chunk, status);
+        aSocket.RecvOneOrMore(chunk, 0, status, len);
         User::WaitForRequest(status);
         User::LeaveIfError(status.Int());
 
-        if (chunk.Length() == 0)
+        TInt bytesRead = len();
+        if (bytesRead <= 0)
         {
             User::Leave(KErrEof);
         }
 
-        offset += chunk.Length();
+        offset += bytesRead;
         aBuffer.SetLength(offset);
     }
 }
