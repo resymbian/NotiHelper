@@ -69,7 +69,11 @@ const TUint KNotiHelperPort = 4711;
 // reports as KErrCouldNotConnect (-34). Accept is still restricted to loopback,
 // so the port is never reachable from the network.
 const TUint32 KNotiHelperBindAddress = KInetAddrAny;
-const TInt KMaxFieldLength = 512;
+// A Java modified UTF-8 field can hold three bytes per BMP character. The old
+// 512-byte cap rejected perfectly ordinary emoji messages, so the bridge
+// answered 0 even though the note itself would have fitted. The clients trim
+// below this cap; this is a hard wire limit, not a target length.
+const TInt KMaxFieldLength = 2048;
 const TInt KMaxNoteLength = 160;
 
 static void ServeL();
@@ -317,6 +321,25 @@ static HBufC* ReadUtfL(RSocket& aSocket)
 }
 
 /**
+ * Only this phone may post. IsLoopback() covers 127.x.x.x and ::1, but the
+ * S60 Java stack sometimes opens the connection against the device's own IAP
+ * address instead. That address is still local: it is the LocalName() of the
+ * accepted socket. Comparing the two keeps the wildcard bind from opening the
+ * port to the network without refusing a valid local client.
+ */
+static TBool IsLocalPeer(RSocket& aConnection)
+{
+    TInetAddr remote;
+    aConnection.RemoteName(remote);
+    if (remote.IsLoopback()) { return ETrue; }
+
+    TInetAddr local;
+    aConnection.LocalName(local);
+    if (local.Family() != remote.Family()) { return EFalse; }
+    return local.Address() == remote.Address();
+}
+
+/**
  * Store the notification as an incoming SMS in the phone's Messaging Inbox.
  *
  * Do not call SaveMessageL(): that creates an SMS-SUBMIT (outgoing) PDU. We
@@ -525,12 +548,10 @@ static void ServeL()
     WriteStatus(_L("boot"));
     WriteStatus(_L("start"));
 
-    // Visible proof that the menu entry really launched the process.
-    TRAPD(noteError, ShowNotificationL(_L("NotiHelper"), _L("Started")));
-    WriteStatusError(_L("note"), noteError);
-
-    // Bring up the listener first. The client only needs the socket and the
-    // note; Messaging is an optional second copy of the notification.
+    // Bring up the listener first. A synchronous Avkon note can stay on screen
+    // for seconds; showing it before Listen() left a window where a client got
+    // -34 even though the icon had clearly been launched. The note is moved
+    // below the "listening" marker.
     RSocketServ socketServer;
     LeaveStatusL(socketServer.Connect(), _L("socketsrv"));
     CleanupClosePushL(socketServer);
@@ -545,6 +566,11 @@ static void ServeL()
     WriteStatus(_L("bind=any"));
     LeaveStatusL(listener.Listen(4), _L("listen"));
     WriteStatus(_L("listening"));
+
+    // Now that the port is live, the startup note is safe and doubles as
+    // visible proof that the menu entry really launched the process.
+    TRAPD(noteError, ShowNotificationL(_L("NotiHelper"), _L("Started")));
+    WriteStatusError(_L("note"), noteError);
 
     TNullMsvObserver msvObserver;
     CMsvSession* messages = NULL;
@@ -576,16 +602,27 @@ static void ServeL()
         CleanupClosePushL(connection);
 
         // The wildcard bind is only for compatibility with the J2ME routing.
-        // Never act on a request that did not come from this device.
-        TInetAddr remote;
-        connection.RemoteName(remote);
-        if (!remote.IsLoopback())
+        // Never act on a request that did not come from this device. A J2ME
+        // stack that addresses the phone's own IAP rather than 127.0.0.1 is
+        // still local and is accepted by IsLocalPeer().
+        if (!IsLocalPeer(connection))
         {
             WriteStatus(_L("reject=remote"));
             CleanupStack::PopAndDestroy(&connection);
             continue;
         }
-        WriteStatus(_L("remote=loopback"));
+        TInetAddr remote;
+        connection.RemoteName(remote);
+        if (remote.IsLoopback())
+        {
+            WriteStatus(_L("remote=loopback"));
+        }
+        else
+        {
+            TBuf<64> line(_L("remote=local="));
+            line.AppendNum(remote.Address(), EHex);
+            WriteStatus(line);
+        }
 
         TBool ok = EFalse;
         TRAPD(handlerError, HandleConnectionL(messages, connection, ok));

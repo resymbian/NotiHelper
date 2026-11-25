@@ -1,6 +1,26 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.1**
+
+Three causes of `-34` (`KErrCouldNotConnect`) and refused notes are fixed:
+
+* the socket listener is now open before the `NotiHelper: Started` note. A
+  synchronous Avkon note can hold the UI thread for seconds, so the old order
+  left a window where the menu icon was visibly launched but a client still
+  got `-34`. The startup log now shows `listening` before `note=0`;
+* the listener binds to all local interfaces (already in 1.1.0) and now also
+  accepts a connection from the phone's own IAP address, not just loopback.
+  The remote is compared with the accepted socket's local address, so the port
+  stays local-only. The log records `remote=loopback` or `remote=local=<hex>`;
+* each modified-UTF-8 field accepts up to 2048 bytes instead of 512. Emoji
+  text that used to be rejected with a zero reply now fits. Clients trim below
+  the cap before sending.
+
+If a test still fails, the cumulative log at `C:\Data\NotiHelper.log` should
+show `boot`, `start`, `bind=any`, `listening`, `note=0`, `msv=ok`, then
+`accept`, a `remote=...` line and `reply=1` for the request.
+
 **Changes in 1.1.0**
 
 1.0.9 kept the process alive and showed the spinner, but Discofi still got
