@@ -235,7 +235,7 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** RSocket::Recv until the descriptor is full. */
+/** RSocket::Read until the descriptor is full. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
     TInt offset = 0;
@@ -245,7 +245,7 @@ static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
     {
         TPtr8 chunk = aBuffer.MidTPtr(offset);
         TRequestStatus status;
-        aSocket.Recv(chunk, chunk.MaxLength(), status);
+        aSocket.Read(chunk, status);
         User::WaitForRequest(status);
         User::LeaveIfError(status.Int());
 
@@ -468,7 +468,7 @@ static void AnswerL(RSocket& aSocket, TBool aOk)
     reply.Append((TUint8)(aOk ? 1 : 0));
 
     TRequestStatus status;
-    aSocket.Send(reply, reply.Length(), status);
+    aSocket.Write(reply, status);
     User::WaitForRequest(status);
     User::LeaveIfError(status.Int());
 }
@@ -590,16 +590,25 @@ static void ServeL()
     for (;;)
     {
         RSocket connection;
+        TInt openErr = connection.Open(socketServer);
+        if (openErr != KErrNone)
+        {
+            WriteStatusError(_L("connopen"), openErr);
+            User::After(200000);
+            continue;
+        }
+        CleanupClosePushL(connection);
+
         TRequestStatus acceptStatus;
         listener.Accept(connection, acceptStatus);
         User::WaitForRequest(acceptStatus);
         if (acceptStatus.Int() != KErrNone)
         {
             WriteStatusError(_L("accept"), acceptStatus.Int());
+            CleanupStack::PopAndDestroy(&connection);
             continue;
         }
         WriteStatus(_L("accept"));
-        CleanupClosePushL(connection);
 
         // The wildcard bind is only for compatibility with the J2ME routing.
         // Never act on a request that did not come from this device. A J2ME

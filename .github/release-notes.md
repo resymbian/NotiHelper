@@ -1,6 +1,13 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.2**
+
+Fix the root cause of `SymbianOS error = -34` (`KErrCouldNotConnect`):
+
+* `RSocket::Accept()` requires a blank socket initialized with `connection.Open(socketServer)` before accepting. Without this call, `Accept` failed immediately with `KErrBadHandle` (`-8`), resulting in an infinite rapid loop and leaving no active listener waiting for incoming connections, causing the phone's TCP stack to reject connections from Discofi and ResyGram with `-34`.
+* Fixed socket I/O in `ReadExactL` and `AnswerL`: replaced `Recv`/`Send` using `length` as socket flags with `Read`/`Write`, avoiding unsupported socket flags (`KErrNotSupported` / `-5`) and unintended `KSockWriteOutOfBand` flags.
+
 **Changes in 1.1.1**
 
 Three causes of `-34` (`KErrCouldNotConnect`) and refused notes are fixed:
