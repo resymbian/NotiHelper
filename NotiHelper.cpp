@@ -78,6 +78,8 @@ const TInt KMaxNoteLength = 160;
 
 static void ServeL();
 static TInt ListenerThreadEntry(TAny* aParameter);
+static void WriteStatus(const TDesC& aText);
+static void WriteStatusError(const TDesC& aStage, TInt aError);
 
 /** S60 application: identifies the EXE and creates the document. */
 class CNotiHelperApplication : public CAknApplication
@@ -429,14 +431,19 @@ static void CreateInboxSmsL(CMsvSession& aSession, const TDesC& aSender,
  */
 static void ShowNotificationL(const TDesC& aTitle, const TDesC& aText)
 {
-    CAknGlobalNote* note = CAknGlobalNote::NewLC();
-
     TBuf<KMaxNoteLength> message;
-    message.Copy(aTitle);
-    message.Append(_L(": "));
-    message.Append(aText);
-    if (message.Length() > KMaxNoteLength) message.SetLength(KMaxNoteLength);
+    if (aTitle.Length() > 0)
+    {
+        message.Append(aTitle.Left(32));
+        message.Append(_L(": "));
+    }
+    TInt remaining = KMaxNoteLength - message.Length();
+    if (remaining > 0 && aText.Length() > 0)
+    {
+        message.Append(aText.Left(remaining));
+    }
 
+    CAknGlobalNote* note = CAknGlobalNote::NewLC();
     note->ShowNoteL(EAknGlobalInformationNote, message);
     CleanupStack::PopAndDestroy(note);
 }
@@ -449,14 +456,18 @@ static void HandleConnectionL(CMsvSession* aSession, RSocket& aConnection,
     HBufC* text = ReadUtfL(aConnection);
     CleanupStack::PushL(text);
 
-    ShowNotificationL(*title, *text);
+    // Trap the note display: if the Avkon global note server is busy, the note
+    // must not cause the notification to be rejected. The SMS is still created
+    // in Inbox and the bridge answers with success (1).
+    TRAPD(noteError, ShowNotificationL(*title, *text));
+    WriteStatusError(_L("note"), noteError);
 
     // The Inbox entry is secondary. The agent must answer even when Messaging
     // is unavailable, otherwise the client reports that no agent is running.
     if (aSession != NULL)
     {
         TRAPD(inboxError, CreateInboxSmsL(*aSession, *title, *text));
-        (void)inboxError;
+        WriteStatusError(_L("inbox"), inboxError);
     }
     aOk = ETrue;
 
@@ -639,8 +650,11 @@ static void ServeL()
         TRAPD(handlerError, HandleConnectionL(messages, connection, ok));
         WriteStatusError(_L("handler"), handlerError);
 
-        TRAPD(answerError, AnswerL(connection, ok));
-        WriteStatusError(_L("reply"), answerError);
+        if (handlerError != KErrDisconnected)
+        {
+            TRAPD(answerError, AnswerL(connection, ok));
+            WriteStatusError(_L("reply"), answerError);
+        }
 
         CleanupStack::PopAndDestroy(&connection);
     }

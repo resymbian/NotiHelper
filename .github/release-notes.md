@@ -1,6 +1,14 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.4**
+
+Fix descriptor overflow panic and bridge refusal:
+
+* `ShowNotificationL`: prevent `USER 11` descriptor overflow panics by safely truncating title (max 32 chars) and body text before appending to the 160-char Avkon message buffer.
+* `HandleConnectionL`: wrap `ShowNotificationL` in `TRAPD(noteError, ...)`. If the transient Avkon global note is rejected, busy, or leaves, it no longer causes the notification to be refused. The SMS is still safely created in Messaging Inbox and the bridge answers with success (1).
+* `ServeL`: do not attempt to write a reply if the client disconnected (`KErrDisconnected` / -36).
+
 **Changes in 1.1.3**
 
 Fix `handler=-25` (`KErrEof`) on accepted incoming connections:
