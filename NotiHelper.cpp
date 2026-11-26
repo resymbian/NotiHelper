@@ -237,40 +237,27 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** Read until the descriptor buffer is full, using stream RSocket::Recv with a deadline. */
+/** Read until the descriptor buffer is full. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
     aBuffer.Zero();
-    RTimer timer;
-    User::LeaveIfError(timer.CreateLocal());
-    CleanupClosePushL(timer);
-
-    TRequestStatus sockStatus;
-    TRequestStatus timerStatus;
-
-    timer.After(timerStatus, 15000000); // 15 seconds
-    aSocket.Recv(aBuffer, 0, sockStatus);
-
-    User::WaitForRequest(sockStatus, timerStatus);
-
-    if (sockStatus == KRequestPending)
+    TBuf8<256> chunk;
+    TSockXfrLength len = 0;
+    while (aBuffer.Length() < aBuffer.MaxLength())
     {
-        aSocket.CancelRecv();
-        User::WaitForRequest(sockStatus);
-        CleanupStack::PopAndDestroy(&timer);
-        User::Leave(KErrTimedOut);
-    }
-    else
-    {
-        timer.Cancel();
-        if (timerStatus == KRequestPending)
+        chunk.Zero();
+        TInt needed = aBuffer.MaxLength() - aBuffer.Length();
+        TPtr8 slice(const_cast<TUint8*>(chunk.Ptr()), 0, needed < 256 ? needed : 256);
+        TRequestStatus status;
+        aSocket.RecvOneOrMore(slice, 0, status, len);
+        User::WaitForRequest(status);
+        User::LeaveIfError(status.Int());
+        if (slice.Length() == 0)
         {
-            User::WaitForRequest(timerStatus);
+            User::Leave(KErrEof);
         }
+        aBuffer.Append(slice);
     }
-
-    CleanupStack::PopAndDestroy(&timer);
-    User::LeaveIfError(sockStatus.Int());
 }
 
 /**
