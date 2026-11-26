@@ -1,6 +1,15 @@
 Native notification bridge for J2ME applications on S60 3rd Edition phones,
 built and signed by GitHub Actions from the source in this repository.
 
+**Changes in 1.1.5**
+
+Fix `handler=-40` (`KErrTooBig`) and listener hang on stalled sockets:
+
+* `ReadExactL`: added an asynchronous `RTimer` (4s timeout) so silent, dropped, or hung socket connections never block the single-threaded listener forever. If a timeout occurs, receive is cancelled and leaves with `KErrTimedOut` (-33), freeing the socket and returning to `Accept`.
+* `ReadUtfL`: detect HTTP proxy prefixes (`CONNECT`, `GET`, `POST`) sent by cellular/WAP gateways, consume proxy headers, reply `200 Connection Established` on CONNECT tunnels, and log received length bytes `utf len=... b0=... b1=...` for diagnostics.
+* Increased maximum field length to 8192 bytes.
+* `ServeL`: do not send reply on dead sockets (`KErrTimedOut`, `KErrDisconnected`, `KErrEof`).
+
 **Changes in 1.1.4**
 
 Fix descriptor overflow panic and bridge refusal:

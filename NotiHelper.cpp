@@ -73,7 +73,7 @@ const TUint32 KNotiHelperBindAddress = KInetAddrAny;
 // 512-byte cap rejected perfectly ordinary emoji messages, so the bridge
 // answered 0 even though the note itself would have fitted. The clients trim
 // below this cap; this is a hard wire limit, not a target length.
-const TInt KMaxFieldLength = 2048;
+const TInt KMaxFieldLength = 8192;
 const TInt KMaxNoteLength = 160;
 
 static void ServeL();
@@ -237,20 +237,39 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** Read until the descriptor buffer is full. */
+/** Read until the descriptor buffer is full, with a per-chunk timeout. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
     TInt offset = 0;
     const TInt maxLength = aBuffer.MaxLength();
 
+    RTimer timer;
+    User::LeaveIfError(timer.CreateLocal());
+    CleanupClosePushL(timer);
+
     while (offset < maxLength)
     {
         TPtr8 chunk(const_cast<TUint8*>(aBuffer.Ptr()) + offset, 0, maxLength - offset);
         TSockXfrLength len;
-        TRequestStatus status;
-        aSocket.RecvOneOrMore(chunk, 0, status, len);
-        User::WaitForRequest(status);
-        User::LeaveIfError(status.Int());
+        TRequestStatus sockStatus;
+        TRequestStatus timerStatus;
+
+        timer.After(timerStatus, 4000000); // 4 seconds timeout
+        aSocket.RecvOneOrMore(chunk, 0, sockStatus, len);
+
+        User::WaitForRequest(sockStatus, timerStatus);
+
+        if (timerStatus != KRequestPending)
+        {
+            aSocket.CancelRecv();
+            User::WaitForRequest(sockStatus);
+            User::Leave(KErrTimedOut);
+        }
+
+        timer.Cancel();
+        User::WaitForRequest(timerStatus);
+
+        User::LeaveIfError(sockStatus.Int());
 
         TInt bytesRead = len();
         if (bytesRead <= 0)
@@ -261,6 +280,8 @@ static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
         offset += bytesRead;
         aBuffer.SetLength(offset);
     }
+
+    CleanupStack::PopAndDestroy(&timer);
 }
 
 /**
@@ -307,7 +328,50 @@ static HBufC* ReadUtfL(RSocket& aSocket)
     lengthBytes.SetLength(2);
     ReadExactL(aSocket, lengthBytes);
 
-    TInt length = (lengthBytes[0] << 8) | lengthBytes[1];
+    // If an HTTP proxy on the device connected and sent CONNECT / GET / POST:
+    if ((lengthBytes[0] == 'C' && lengthBytes[1] == 'O') || // CONNECT
+        (lengthBytes[0] == 'G' && lengthBytes[1] == 'E') || // GET
+        (lengthBytes[0] == 'P' && lengthBytes[1] == 'O'))   // POST
+    {
+        WriteStatus(_L("proxy handshake"));
+        TBuf8<1> b;
+        b.SetLength(1);
+        TInt crlfCount = 0;
+        for (TInt i = 0; i < 4096; i++)
+        {
+            ReadExactL(aSocket, b);
+            if (b[0] == '\r' || b[0] == '\n')
+            {
+                crlfCount++;
+                if (crlfCount >= 4) break;
+            }
+            else
+            {
+                crlfCount = 0;
+            }
+        }
+        if (lengthBytes[0] == 'C')
+        {
+            _LIT8(KHttp200, "HTTP/1.1 200 Connection Established\r\n\r\n");
+            TRequestStatus status;
+            aSocket.Write(KHttp200, status);
+            User::WaitForRequest(status);
+        }
+        ReadExactL(aSocket, lengthBytes);
+    }
+
+    TInt b0 = (TInt)lengthBytes[0];
+    TInt b1 = (TInt)lengthBytes[1];
+    TInt length = (b0 << 8) | b1;
+
+    TBuf<64> lenLog(_L("utf len="));
+    lenLog.AppendNum(length);
+    lenLog.Append(_L(" b0="));
+    lenLog.AppendNum(b0, EHex);
+    lenLog.Append(_L(" b1="));
+    lenLog.AppendNum(b1, EHex);
+    WriteStatus(lenLog);
+
     if (length < 0 || length > KMaxFieldLength) User::Leave(KErrTooBig);
     if (length == 0) return HBufC::NewL(0);
 
@@ -650,7 +714,7 @@ static void ServeL()
         TRAPD(handlerError, HandleConnectionL(messages, connection, ok));
         WriteStatusError(_L("handler"), handlerError);
 
-        if (handlerError != KErrDisconnected)
+        if (handlerError != KErrDisconnected && handlerError != KErrTimedOut && handlerError != KErrEof)
         {
             TRAPD(answerError, AnswerL(connection, ok));
             WriteStatusError(_L("reply"), answerError);
