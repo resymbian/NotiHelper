@@ -237,51 +237,40 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** Read until the descriptor buffer is full, with a per-chunk timeout. */
+/** Read until the descriptor buffer is full, using stream RSocket::Recv with a deadline. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
-    TInt offset = 0;
-    const TInt maxLength = aBuffer.MaxLength();
-
+    aBuffer.Zero();
     RTimer timer;
     User::LeaveIfError(timer.CreateLocal());
     CleanupClosePushL(timer);
 
-    while (offset < maxLength)
+    TRequestStatus sockStatus;
+    TRequestStatus timerStatus;
+
+    timer.After(timerStatus, 15000000); // 15 seconds
+    aSocket.Recv(aBuffer, 0, sockStatus);
+
+    User::WaitForRequest(sockStatus, timerStatus);
+
+    if (sockStatus == KRequestPending)
     {
-        TPtr8 chunk(const_cast<TUint8*>(aBuffer.Ptr()) + offset, 0, maxLength - offset);
-        TSockXfrLength len;
-        TRequestStatus sockStatus;
-        TRequestStatus timerStatus;
-
-        timer.After(timerStatus, 15000000); // 15 seconds timeout
-        aSocket.RecvOneOrMore(chunk, 0, sockStatus, len);
-
-        User::WaitForRequest(sockStatus, timerStatus);
-
-        if (sockStatus == KRequestPending)
-        {
-            aSocket.CancelRecv();
-            User::WaitForRequest(sockStatus);
-            User::Leave(KErrTimedOut);
-        }
-
+        aSocket.CancelRecv();
+        User::WaitForRequest(sockStatus);
+        CleanupStack::PopAndDestroy(&timer);
+        User::Leave(KErrTimedOut);
+    }
+    else
+    {
         timer.Cancel();
-        User::WaitForRequest(timerStatus);
-
-        User::LeaveIfError(sockStatus.Int());
-
-        TInt bytesRead = len();
-        if (bytesRead <= 0)
+        if (timerStatus == KRequestPending)
         {
-            User::Leave(KErrEof);
+            User::WaitForRequest(timerStatus);
         }
-
-        offset += bytesRead;
-        aBuffer.SetLength(offset);
     }
 
     CleanupStack::PopAndDestroy(&timer);
+    User::LeaveIfError(sockStatus.Int());
 }
 
 /**
@@ -325,7 +314,7 @@ static void AppendModifiedUtf8L(const TDesC8& aSource, TDes& aTarget)
 static HBufC* ReadUtfL(RSocket& aSocket)
 {
     TBuf8<2> lengthBytes;
-    lengthBytes.SetLength(2);
+    lengthBytes.Zero();
     ReadExactL(aSocket, lengthBytes);
 
     // If an HTTP proxy on the device connected and sent CONNECT / GET / POST:
@@ -335,7 +324,7 @@ static HBufC* ReadUtfL(RSocket& aSocket)
     {
         WriteStatus(_L("proxy handshake"));
         TBuf8<1> b;
-        b.SetLength(1);
+        b.Zero();
         TInt crlfCount = 0;
         for (TInt i = 0; i < 4096; i++)
         {
@@ -357,6 +346,7 @@ static HBufC* ReadUtfL(RSocket& aSocket)
             aSocket.Write(KHttp200, status);
             User::WaitForRequest(status);
         }
+        lengthBytes.Zero();
         ReadExactL(aSocket, lengthBytes);
     }
 
@@ -377,9 +367,8 @@ static HBufC* ReadUtfL(RSocket& aSocket)
 
     HBufC8* raw = HBufC8::NewLC(length);
     TPtr8 rawPtr = raw->Des();
-    rawPtr.SetLength(length);
+    rawPtr.Zero();
     ReadExactL(aSocket, rawPtr);
-    raw->Des().SetLength(length);
 
     HBufC* text = HBufC::NewL(length);
     TPtr target = text->Des();
