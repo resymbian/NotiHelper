@@ -434,10 +434,10 @@ static void CreateInboxSmsL(CMsvSession& aSession, const TDesC& aSender,
     sms->RestoreServiceAndSettingsL();
 
     TMsvId serviceId = sms->ServiceId();
-    if (serviceId == KMsvNullServiceId)
+    if (serviceId == KMsvNullIndexEntryId)
     {
         TRAP_IGNORE(serviceId = sms->DefaultServiceL());
-        if (serviceId == KMsvNullServiceId)
+        if (serviceId == KMsvNullIndexEntryId)
         {
             serviceId = KMsvLocalServiceIndexEntryId;
         }
