@@ -254,12 +254,12 @@ static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
         TRequestStatus sockStatus;
         TRequestStatus timerStatus;
 
-        timer.After(timerStatus, 4000000); // 4 seconds timeout
+        timer.After(timerStatus, 15000000); // 15 seconds timeout
         aSocket.RecvOneOrMore(chunk, 0, sockStatus, len);
 
         User::WaitForRequest(sockStatus, timerStatus);
 
-        if (timerStatus != KRequestPending)
+        if (sockStatus == KRequestPending)
         {
             aSocket.CancelRecv();
             User::WaitForRequest(sockStatus);
@@ -433,12 +433,22 @@ static void CreateInboxSmsL(CMsvSession& aSession, const TDesC& aSender,
     sms->SwitchCurrentEntryL(KMsvGlobalInBoxIndexEntryId);
     sms->RestoreServiceAndSettingsL();
 
+    TMsvId serviceId = sms->ServiceId();
+    if (serviceId == KMsvNullServiceId)
+    {
+        TRAP_IGNORE(serviceId = sms->DefaultServiceL());
+        if (serviceId == KMsvNullServiceId)
+        {
+            serviceId = KMsvLocalServiceIndexEntryId;
+        }
+    }
+
     TMsvEntry entry;
     entry.iDate.HomeTime();
     entry.SetInPreparation(ETrue);
     entry.iMtm = KUidMsgTypeSMS;
     entry.iType = KUidMsvMessageEntry;
-    entry.iServiceId = sms->ServiceId();
+    entry.iServiceId = serviceId;
     entry.iDetails.Set(aSender);
 
     TPtrC preview(aText.Left(12));
@@ -512,33 +522,6 @@ static void ShowNotificationL(const TDesC& aTitle, const TDesC& aText)
     CleanupStack::PopAndDestroy(note);
 }
 
-static void HandleConnectionL(CMsvSession* aSession, RSocket& aConnection,
-    TBool& aOk)
-{
-    HBufC* title = ReadUtfL(aConnection);
-    CleanupStack::PushL(title);
-    HBufC* text = ReadUtfL(aConnection);
-    CleanupStack::PushL(text);
-
-    // Trap the note display: if the Avkon global note server is busy, the note
-    // must not cause the notification to be rejected. The SMS is still created
-    // in Inbox and the bridge answers with success (1).
-    TRAPD(noteError, ShowNotificationL(*title, *text));
-    WriteStatusError(_L("note"), noteError);
-
-    // The Inbox entry is secondary. The agent must answer even when Messaging
-    // is unavailable, otherwise the client reports that no agent is running.
-    if (aSession != NULL)
-    {
-        TRAPD(inboxError, CreateInboxSmsL(*aSession, *title, *text));
-        WriteStatusError(_L("inbox"), inboxError);
-    }
-    aOk = ETrue;
-
-    CleanupStack::PopAndDestroy(text);
-    CleanupStack::PopAndDestroy(title);
-}
-
 static void AnswerL(RSocket& aSocket, TBool aOk)
 {
     TBuf8<1> reply;
@@ -548,6 +531,35 @@ static void AnswerL(RSocket& aSocket, TBool aOk)
     aSocket.Write(reply, status);
     User::WaitForRequest(status);
     User::LeaveIfError(status.Int());
+}
+
+static void HandleConnectionL(CMsvSession* aSession, RSocket& aConnection,
+    TBool& aAnswered)
+{
+    HBufC* title = ReadUtfL(aConnection);
+    CleanupStack::PushL(title);
+    HBufC* text = ReadUtfL(aConnection);
+    CleanupStack::PushL(text);
+
+    // Answer the client immediately so it never hits client-side socket timeouts.
+    AnswerL(aConnection, ETrue);
+    aAnswered = ETrue;
+    WriteStatus(_L("reply=1"));
+
+    // Trap the note display: if the Avkon global note server is busy, the note
+    // must not cause the notification to fail.
+    TRAPD(noteError, ShowNotificationL(*title, *text));
+    WriteStatusError(_L("note"), noteError);
+
+    // The Inbox entry is secondary.
+    if (aSession != NULL)
+    {
+        TRAPD(inboxError, CreateInboxSmsL(*aSession, *title, *text));
+        WriteStatusError(_L("inbox"), inboxError);
+    }
+
+    CleanupStack::PopAndDestroy(text);
+    CleanupStack::PopAndDestroy(title);
 }
 
 /**
@@ -710,13 +722,13 @@ static void ServeL()
             WriteStatus(line);
         }
 
-        TBool ok = EFalse;
-        TRAPD(handlerError, HandleConnectionL(messages, connection, ok));
+        TBool answered = EFalse;
+        TRAPD(handlerError, HandleConnectionL(messages, connection, answered));
         WriteStatusError(_L("handler"), handlerError);
 
-        if (handlerError != KErrDisconnected && handlerError != KErrTimedOut && handlerError != KErrEof)
+        if (!answered && handlerError != KErrDisconnected && handlerError != KErrTimedOut && handlerError != KErrEof)
         {
-            TRAPD(answerError, AnswerL(connection, ok));
+            TRAPD(answerError, AnswerL(connection, EFalse));
             WriteStatusError(_L("reply"), answerError);
         }
 
