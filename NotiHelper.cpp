@@ -240,23 +240,25 @@ public:
 /** Read until the descriptor buffer is full. */
 static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
 {
-    aBuffer.Zero();
-    TBuf8<256> chunk;
-    TSockXfrLength len = 0;
     while (aBuffer.Length() < aBuffer.MaxLength())
     {
-        chunk.Zero();
         TInt needed = aBuffer.MaxLength() - aBuffer.Length();
-        TPtr8 slice(const_cast<TUint8*>(chunk.Ptr()), 0, needed < 256 ? needed : 256);
+        TPtr8 slice(const_cast<TUint8*>(aBuffer.Ptr()) + aBuffer.Length(), 0, needed);
+        TSockXfrLength len = 0;
         TRequestStatus status;
         aSocket.RecvOneOrMore(slice, 0, status, len);
         User::WaitForRequest(status);
         User::LeaveIfError(status.Int());
-        if (slice.Length() == 0)
+        TInt readBytes = len();
+        if (readBytes <= 0)
+        {
+            readBytes = slice.Length();
+        }
+        if (readBytes <= 0)
         {
             User::Leave(KErrEof);
         }
-        aBuffer.Append(slice);
+        aBuffer.SetLength(aBuffer.Length() + readBytes);
     }
 }
 
@@ -512,8 +514,10 @@ static void AnswerL(RSocket& aSocket, TBool aOk)
 static void HandleConnectionL(CMsvSession* aSession, RSocket& aConnection,
     TBool& aAnswered)
 {
+    WriteStatus(_L("read title"));
     HBufC* title = ReadUtfL(aConnection);
     CleanupStack::PushL(title);
+    WriteStatus(_L("read text"));
     HBufC* text = ReadUtfL(aConnection);
     CleanupStack::PushL(text);
 
