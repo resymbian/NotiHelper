@@ -237,12 +237,12 @@ public:
     void HandleSessionEventL(TMsvSessionEvent, TAny*, TAny*, TAny*) {}
 };
 
-/** Read until the descriptor buffer is full. */
-static void ReadExactL(RSocket& aSocket, TDes8& aBuffer)
+/** Read exactly aTargetLength bytes into aBuffer. */
+static void ReadExactL(RSocket& aSocket, TDes8& aBuffer, TInt aTargetLength)
 {
-    while (aBuffer.Length() < aBuffer.MaxLength())
+    while (aBuffer.Length() < aTargetLength)
     {
-        TInt needed = aBuffer.MaxLength() - aBuffer.Length();
+        TInt needed = aTargetLength - aBuffer.Length();
         TPtr8 slice(const_cast<TUint8*>(aBuffer.Ptr()) + aBuffer.Length(), 0, needed);
         TSockXfrLength len = 0;
         TRequestStatus status;
@@ -304,7 +304,7 @@ static HBufC* ReadUtfL(RSocket& aSocket)
 {
     TBuf8<2> lengthBytes;
     lengthBytes.Zero();
-    ReadExactL(aSocket, lengthBytes);
+    ReadExactL(aSocket, lengthBytes, 2);
 
     // If an HTTP proxy on the device connected and sent CONNECT / GET / POST:
     if ((lengthBytes[0] == 'C' && lengthBytes[1] == 'O') || // CONNECT
@@ -313,11 +313,11 @@ static HBufC* ReadUtfL(RSocket& aSocket)
     {
         WriteStatus(_L("proxy handshake"));
         TBuf8<1> b;
-        b.Zero();
         TInt crlfCount = 0;
         for (TInt i = 0; i < 4096; i++)
         {
-            ReadExactL(aSocket, b);
+            b.Zero();
+            ReadExactL(aSocket, b, 1);
             if (b[0] == '\r' || b[0] == '\n')
             {
                 crlfCount++;
@@ -336,7 +336,7 @@ static HBufC* ReadUtfL(RSocket& aSocket)
             User::WaitForRequest(status);
         }
         lengthBytes.Zero();
-        ReadExactL(aSocket, lengthBytes);
+        ReadExactL(aSocket, lengthBytes, 2);
     }
 
     TInt b0 = (TInt)lengthBytes[0];
@@ -355,13 +355,12 @@ static HBufC* ReadUtfL(RSocket& aSocket)
     if (length == 0) return HBufC::NewL(0);
 
     HBufC8* raw = HBufC8::NewLC(length);
-    TPtr8 rawPtr = raw->Des();
-    rawPtr.Zero();
-    ReadExactL(aSocket, rawPtr);
+    TPtr8 rawPtr(const_cast<TUint8*>(raw->Ptr()), 0, length);
+    ReadExactL(aSocket, rawPtr, length);
 
     HBufC* text = HBufC::NewL(length);
     TPtr target = text->Des();
-    AppendModifiedUtf8L(*raw, target);
+    AppendModifiedUtf8L(rawPtr, target);
     CleanupStack::PopAndDestroy(raw);
     return text;
 }
